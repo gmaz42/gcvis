@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"io"
+	"log"
 	"regexp"
 	"strconv"
 )
@@ -124,6 +125,7 @@ func getMatchMap(re *regexp.Regexp, matches []string) map[string]string {
 func silentParseInt(value string) int64 {
 	intVal, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
+		log.Printf("gcvis: could not parse %q as integer: %v", value, err)
 		return 0
 	}
 
@@ -133,6 +135,7 @@ func silentParseInt(value string) int64 {
 func silentParseFloat(value string) float64 {
 	floatVal, err := strconv.ParseFloat(value, 64)
 	if err != nil {
+		log.Printf("gcvis: could not parse %q as float: %v", value, err)
 		return float64(0)
 	}
 

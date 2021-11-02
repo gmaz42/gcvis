@@ -82,14 +82,13 @@ func main() {
 				os.Exit(1)
 			}
 
-			os.Exit(0)
+			goto out
 		}
 	}
+out:
 
 	if subcommand != nil && subcommand.Err() != nil {
 		fmt.Fprintf(os.Stderr, subcommand.Err().Error())
 		os.Exit(1)
 	}
-
-	os.Exit(0)
 }
