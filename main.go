@@ -20,8 +20,8 @@ import (
 )
 
 var iface = flag.String("i", "127.0.0.1", "specify interface to use. defaults to 127.0.0.1.")
-var port = flag.String("p", "0", "specify port to use.")
-var openBrowser = flag.Bool("o", true, "automatically open browser")
+var port = flag.String("p", "4500", "specify port to use.")
+var openBrowser = flag.Bool("o", false, "automatically open browser")
 
 func main() {
 	flag.Usage = func() {
