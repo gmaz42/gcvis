@@ -7,21 +7,21 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"strings"
-
-	"github.com/pkg/browser"
+	"time"
 
 	"golang.org/x/crypto/ssh/terminal"
 )
 
 var iface = flag.String("i", "127.0.0.1", "specify interface to use. defaults to 127.0.0.1.")
 var port = flag.String("p", "4500", "specify port to use.")
-var openBrowser = flag.Bool("o", false, "automatically open browser")
+var serviceName = flag.String("s", "example", "specify service name to include in generated log lines")
 
 func main() {
 	flag.Usage = func() {
@@ -61,18 +61,17 @@ func main() {
 
 	url := server.Url()
 
-	if *openBrowser {
-		log.Printf("opening browser window, if this fails, navigate to %s", url)
-		browser.OpenURL(url)
-	} else {
-		log.Printf("server started on %s", url)
-	}
+	log.Printf("server started on %s", url)
 
 	for {
 		select {
 		case gcTrace := <-parser.GcChan:
+			// generate a Loki-compatible JSON output line using this trace
+			generateLokiLogLine(gcTrace)
+
 			gcvisGraph.AddGCTraceGraphPoint(gcTrace)
 		case scvgTrace := <-parser.ScvgChan:
+			// we do not ingest these for Prometheus
 			gcvisGraph.AddScavengerGraphPoint(scvgTrace)
 		case output := <-parser.NoMatchChan:
 			fmt.Fprintln(os.Stderr, output)
@@ -90,5 +89,57 @@ out:
 	if subcommand != nil && subcommand.Err() != nil {
 		fmt.Fprintf(os.Stderr, subcommand.Err().Error())
 		os.Exit(1)
+	}
+}
+
+// `{"lvl":"info","host":%q,"srv":"some-service-name","component":"gcvis","time":"%s","msg":%q}`, host, "2021-11-03T14:21:38.783992927Z", msg
+type logLine struct {
+	Level     string `json:"lvl"`
+	Host      string `json:"host"`
+	Service   string `json:"srv"`
+	Component string `json:"component"`
+	// Time is overriden with the calculated time. This timestamp must be formatted as UTC RFC3339
+	Time    time.Time `json:"time"`
+	Message string    `json:"msg"`
+
+	GC struct {
+		HeapUse                                                                              int64
+		STWSclock, MASclock, STWMclock, STWScpu, MASAssistcpu, MASBGcpu, MASIdlecpu, STWMcpu float64
+	} `json:"gc"`
+}
+
+var ownHost string
+
+func init() {
+	ownHost, _ = os.Hostname()
+}
+
+func generateLokiLogLine(t *gctrace) {
+	var l logLine
+	l.Level = "info"
+	l.Host = ownHost
+	l.Service = *serviceName
+	l.Component = "gcvis"
+	l.Message = "garbage collection event"
+
+	// precision is milliseconds thus we can use this conversion here
+	deltaMs := time.Millisecond * time.Duration(int64(t.ElapsedTime*1000))
+
+	l.Time = StartTime.Add(deltaMs).UTC()
+
+	// add harvested fields
+	l.GC.HeapUse = t.Heap1
+	l.GC.MASAssistcpu = t.MASAssistcpu
+	l.GC.MASBGcpu = t.MASBGcpu
+	l.GC.MASIdlecpu = t.MASIdlecpu
+	l.GC.MASclock = t.MASclock
+	l.GC.STWMclock = t.STWMclock
+	l.GC.STWMcpu = t.STWMcpu
+	l.GC.STWSclock = t.STWSclock
+	l.GC.STWScpu = t.STWScpu
+
+	err := json.NewEncoder(os.Stderr).Encode(&l)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: cannot encode log line: %v\n", err)
 	}
 }
