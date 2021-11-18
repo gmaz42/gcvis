@@ -1,4 +1,4 @@
-module github.com/davecheney/gcvis
+module github.com/gmaz42/gcvis
 
 go 1.17
 
